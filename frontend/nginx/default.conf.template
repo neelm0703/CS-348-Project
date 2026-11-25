@@ -1,0 +1,36 @@
+server {
+    listen ${PORT};
+    root /usr/share/nginx/html;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    # API: forward to the backend so the browser only ever talks to this origin.
+    # Same origin means the auth cookie is sent and CORS never applies.
+    location /api/ {
+        # No path after the host, so the request path is passed through unchanged
+        # (/api/applications stays /api/applications).
+        proxy_pass ${BACKEND_URL};
+
+        # The Host header is left at nginx's default, the backend's own host.
+        # Cloud Run routes requests by Host, so sending this site's host would 404.
+
+        # Send the backend's hostname during the TLS handshake (SNI); Cloud Run
+        # needs it. Has no effect when BACKEND_URL is plain http (compose).
+        proxy_ssl_server_name on;
+
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Vite puts content-hashed files in /assets/, so they can be cached for good.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # Everything else is the app itself. index.html is never cached, so a new
+    # deploy is picked up on the next page load.
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
+    }
+}
